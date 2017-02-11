@@ -1,0 +1,858 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 105,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import scipy.stats\n",
+    "import statsmodels.api as sm\n",
+    "import requests\n",
+    "import os.path\n",
+    "import time\n",
+    "import random\n",
+    "import re\n",
+    "import math\n",
+    "import sklearn\n",
+    "\n",
+    "\n",
+    "from sklearn import metrics\n",
+    "# Standarization para la construcción de ratios (pre-built functionality under sklearn.preprocessing)\n",
+    "from sklearn.preprocessing import scale\n",
+    "# Analisis de Componentes Principales\n",
+    "from sklearn.decomposition import PCA\n",
+    "from sklearn.ensemble import RandomForestRegressor"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 106,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "#DOWLOADING FILE FROM DROPBOX FIRST TIME\n",
+    "\n",
+    "while not os.path.exists('EX2_DATA_BASE.xlsx'):\n",
+    "    time.sleep (3*random.random()); #Sleeping less than 3 seconds before going to Dropbox - avoid too many students at once.\n",
+    "    if not os.path.exists('EX2_DATA_BASE.xlsx'):\n",
+    "        print \"DOWLOADING FILE EX2_DATA_BASE.xlsx FROM DROPBOX BECAUSE LOCAL FILE DOES NOT EXIST!\"\n",
+    "\n",
+    "        #        csvfile = urllib2.urlopen(\"https://dl.dropboxusercontent.com/u/28535341/EX2_DEV_DATA.xlsx\")\n",
+    "        resp = requests.get(\"https://dl.dropboxusercontent.com/u/28535341/EX2_DATA_BASE.xlsx\")        \n",
+    "        output = open('EX2_DATA_BASE.xlsx','wb')\n",
+    "        output.write(resp.content)\n",
+    "        output.close()\n",
+    "#DOWLOADING FILE FROM DROPBOX FIRST TIME"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 107,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "LOADING DATASETS...\n"
+     ]
+    }
+   ],
+   "source": [
+    "print \"LOADING DATASETS...\"\n",
+    "\n",
+    "df = pd.read_excel(open('EX2_DATA_BASE.xlsx','rb'), sheetname='DATA')\n",
+    "df_dictionary = pd.read_excel(open('EX2_DATA_BASE.xlsx','rb'), sheetname='DICTIONARY')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 108,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "GETTING LIST OF VARIABLES...\n"
+     ]
+    }
+   ],
+   "source": [
+    "print \"GETTING LIST OF VARIABLES...\"\n",
+    "\n",
+    "target_variable = str(df_dictionary[df_dictionary['TYPE_OF_VARIABLE'] == 'TARGET']['FIELD_NAME'].tolist()[0])\n",
+    "\n",
+    "list_of_inputs_for_model0 = df_dictionary[df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT0']['FIELD_NAME'].tolist()\n",
+    "\n",
+    "list_of_inputs_for_model1 = df_dictionary[(df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT0') | (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT1')]['FIELD_NAME'].tolist()\n",
+    "\n",
+    "list_of_inputs_for_model2 = df_dictionary[(df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT0') | (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT1')| (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT2')]['FIELD_NAME'].tolist()\n",
+    "\n",
+    "list_of_inputs_for_model3 = df_dictionary[(df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT0') | (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT1')| (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT2')| (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT3')]['FIELD_NAME'].tolist()\n",
+    "\n",
+    "list_of_inputs_for_model4 = df_dictionary[(df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT0') | (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT1')| (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT2')| (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT3')| (df_dictionary['TYPE_OF_VARIABLE'] == 'INPUT4')]['FIELD_NAME'].tolist()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 109,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "list_continuous_PD=[col for col in list(df) if (col.startswith('BB_1YR_DEFAULT_PROB'))]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 110,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Se incluyen solo las variables continuas\n",
+    "\n",
+    "list_of_inputs_for_model0 = [ v for v in list_of_inputs_for_model0 if not (v.startswith('BEST_') |v.startswith('CUR_')\n",
+    "                                                                           |v.startswith('NAME')\n",
+    "                                                                           |v.startswith('INDUSTRY_')\n",
+    "                                                                           |v.startswith('TICKER'))]\n",
+    "\n",
+    "list_of_inputs_for_model1 = [ v for v in list_of_inputs_for_model1 if not (v.startswith('BEST_') |v.startswith('CUR_')\n",
+    "                                                                           |v.startswith('NAME')\n",
+    "                                                                           |v.startswith('INDUSTRY_')\n",
+    "                                                                           |v.startswith('TICKER'))]\n",
+    "list_of_inputs_for_model2 = [ v for v in list_of_inputs_for_model2 if not (v.startswith('BEST_') |v.startswith('CUR_')\n",
+    "                                                                           |v.startswith('NAME')\n",
+    "                                                                           |v.startswith('INDUSTRY_')\n",
+    "                                                                           |v.startswith('TICKER'))]\n",
+    "list_of_inputs_for_model3 = [ v for v in list_of_inputs_for_model3 if not (v.startswith('BEST_') |v.startswith('CUR_')\n",
+    "                                                                           |v.startswith('NAME')\n",
+    "                                                                           |v.startswith('INDUSTRY_')\n",
+    "                                                                           |v.startswith('TICKER'))]\n",
+    "list_of_inputs_for_model4 = [ v for v in list_of_inputs_for_model4 if not (v.startswith('BEST_') |v.startswith('CUR_')\n",
+    "                                                                           |v.startswith('NAME')\n",
+    "                                                                           |v.startswith('INDUSTRY_')\n",
+    "                                                                           |v.startswith('TICKER'))]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 111,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(116, 315)"
+      ]
+     },
+     "execution_count": 111,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df.shape #N<p"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 80,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "# En este punto si tuviéramos un gran número de observaciones, separaríamos entre train y test."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 112,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Comprobar que la Target está informada y en el rango (0,1)\n",
+    "df = df[(df[target_variable].between(0,1))] "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 113,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Variable target y variable ID\n",
+    "target_variable='BB_1YR_DEFAULT_PROB_CQ4_2015'\n",
+    "identifier = 'TICKER'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 114,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(111, 315)"
+      ]
+     },
+     "execution_count": 114,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df.shape"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 115,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Tratamiento de missing value. Todas las variables son continuas por lo que se utilizn las medias.\n",
+    "# En el TFM habría que proceder a identificar en tipo de variables como en la práctica 1 de Gadi.\n",
+    "# Se procede a imputar valores sin estudiar si existen patrones. \n",
+    "for var in df.columns:\n",
+    "    if (var in list_of_inputs_for_model4):\n",
+    "        missing=df[var].mean()\n",
+    "        df.loc[df[var].isnull(), var]=missing"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 116,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Tratamiento de \"super outliers\" \n",
+    "# Se van a detectar a nivel univariante.  Un análisis más elaborado llevaría a la aplicación de técnicas multivariante. \n",
+    "# 1. ¿Cómo se identifican? Criterio muy poco restrictivo si limpiamos a nivel univariante para no quedarnos sin observaciones. Optamos por un criterio simple y limpieza univariante.\n",
+    "# 2. Se sustituyen por el valor medio\n",
+    "\n",
+    "# Outlier detection in very small sets, alternativamente MAD (mejorar para el TFM):\n",
+    "for var in df.columns:\n",
+    "    if (var in list_of_inputs_for_model4):\n",
+    "        media = df[var].mean()\n",
+    "        stdev= df[var].std()\n",
+    "        df.loc[abs(df[var] -media) > 3*stdev, var] = media            "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 117,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "# Construcción de ratios multiples limitado a: \n",
+    "# 1. División entre todas las partidas del modelo del mismo año\n",
+    "# 2. Tasas de crecimiento de los ratios"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 118,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "### Modelo 0####"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 119,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Eliminar la target y el ID\n",
+    "dfid  = df [identifier]\n",
+    "dftarget = df[target_variable]\n",
+    "\n",
+    "df.drop([identifier, target_variable], axis=1, inplace=True)\n",
+    "list0ratios = [x for x in list_of_inputs_for_model0 if x not in list_continuous_PD]\n",
+    "\n",
+    "# Restringir el dataframe a las columnas contenidas en la lista\n",
+    "df_modelo0 = df[list_of_inputs_for_model0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 153,
+   "metadata": {
+    "collapsed": false,
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0     -0.625107\n",
+       "1     -0.491582\n",
+       "2     -0.582001\n",
+       "3     -0.474557\n",
+       "4     -0.590329\n",
+       "5     -0.619400\n",
+       "6     -0.577293\n",
+       "7     -0.512942\n",
+       "8     -0.628744\n",
+       "9      0.238738\n",
+       "10    -0.564706\n",
+       "11    -0.588489\n",
+       "12    -0.584298\n",
+       "13    -0.589926\n",
+       "14    -0.259514\n",
+       "15    -0.602692\n",
+       "16    -0.312048\n",
+       "17    -0.452357\n",
+       "18    -0.604172\n",
+       "19    -0.227053\n",
+       "20    -0.574636\n",
+       "21    -0.467122\n",
+       "22    -0.643695\n",
+       "23    -0.359375\n",
+       "24    -0.361340\n",
+       "25     0.238738\n",
+       "26    -0.604926\n",
+       "27     0.238738\n",
+       "28    -0.637013\n",
+       "29    -0.594629\n",
+       "         ...   \n",
+       "83     1.853878\n",
+       "84    -0.192784\n",
+       "85     0.196253\n",
+       "86     0.331012\n",
+       "88    -0.454646\n",
+       "89    -0.518681\n",
+       "90    -0.597942\n",
+       "91    -0.276459\n",
+       "92    -0.546901\n",
+       "93    -0.541312\n",
+       "94     0.657620\n",
+       "95     0.342929\n",
+       "96     2.131018\n",
+       "97     0.021047\n",
+       "98     0.560991\n",
+       "99     0.238738\n",
+       "100    5.392973\n",
+       "101    2.925090\n",
+       "102    0.357236\n",
+       "103    1.502860\n",
+       "104    0.238738\n",
+       "105    4.345571\n",
+       "106   -0.275465\n",
+       "108    0.549321\n",
+       "109   -0.374852\n",
+       "110    4.378844\n",
+       "111    0.104052\n",
+       "112    0.322162\n",
+       "113    0.238738\n",
+       "114   -0.146628\n",
+       "Name: BB_1YR_DEFAULT_PROB_CQ2_2014, dtype: float64"
+      ]
+     },
+     "execution_count": 153,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df_modelo0['BB_1YR_DEFAULT_PROB_CQ2_2014']"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 120,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/Users/Ainhoa/anaconda/lib/python2.7/site-packages/ipykernel/__main__.py:9: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame.\n",
+      "Try using .loc[row_indexer,col_indexer] = value instead\n",
+      "\n",
+      "See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy\n",
+      "/Users/Ainhoa/anaconda/lib/python2.7/site-packages/ipykernel/__main__.py:14: SettingWithCopyWarning: \n",
+      "A value is trying to be set on a copy of a slice from a DataFrame.\n",
+      "Try using .loc[row_indexer,col_indexer] = value instead\n",
+      "\n",
+      "See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy\n"
+     ]
+    }
+   ],
+   "source": [
+    "lenls=len(df_modelo0.columns)\n",
+    "\n",
+    "for i in range(0, lenls):\n",
+    "    v_1=df_modelo0.columns[i]\n",
+    "    for j in range(i+1, lenls):\n",
+    "        v_2=df_modelo0.columns[j]\n",
+    "        if(v_1 in list0ratios and v_2 in list0ratios):\n",
+    "            ratio='r_div'+v_1+v_2\n",
+    "            df_modelo0[ratio]=np.where(df_modelo0[v_2]==0,0,(df_modelo0[v_1]/df_modelo0[v_2]))\n",
+    "            list_of_inputs_for_model0.append(ratio)\n",
+    "            \n",
+    "        #tasa de crecimiento. \n",
+    "            ratio='r_tasa'+v_1+v_2\n",
+    "            df_modelo0[ratio]=np.where(df_modelo0[v_2]==0,0,((df_modelo0[v_1]-df_modelo0[v_2])/df_modelo0[v_2])) \n",
+    "            list_of_inputs_for_model0.append(ratio)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 199,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "#¿Cómo incluyo una variable que calcule tasa con un periodo anterior o cuatrimestre? para no incluir todo tipo de varaibles"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 123,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Reemplazamos todos los NaN por la mediana de la columna por ser ratios (las obseervacione soriginales se habían sustituido por la media)\n",
+    "\n",
+    "df_modelo0= df_modelo0.replace([np.inf,-np.inf],0)  # Repasar si se sustituye por la media. \n",
+    "#df = df.apply(lambda x: x.fillna(x.median()),axis=0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 124,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Escalar las variables para aplicación de PCA\n",
+    "for var in df_modelo0.columns:\n",
+    "    if(var in list_of_inputs_for_model0):\n",
+    "        media=df_modelo0[var].mean()\n",
+    "        stdev=df_modelo0[var].std()\n",
+    "        \n",
+    "        df_modelo0[var]=(df_modelo0[var]-media) /stdev"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 125,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Realizadas todas las transformaciones, restringimos el df a ratios y PD para aplicar PCA\n",
+    "\n",
+    "list_of_inputs_for_model0 = [ v for v in list_of_inputs_for_model0 if  (v.startswith('r') |v.startswith('BB_1YR_DEFAULT_PROB'))]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 206,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "# Habría que hacer un split en train y test en este punto"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 111,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "#  Aplicación PCA para selección ratios que expliquen un porcentaje de la varianza ¿Deberíamos aplicar validación cruzada?"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 135,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(111, 19605)"
+      ]
+     },
+     "execution_count": 135,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "df_modelo0.shape"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 136,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "pca=PCA()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 129,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# No es necesario realizar el escalada, ya hemos normalizado\n",
+    "#escalado=scale(df_0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 137,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# 1. Standardization (or Z-score normalization) is the process where the features are rescaled so that they’ll have the properties of a standard normal distribution with μ=0 and σ=1, where μ is the mean (average) and σ is the standard deviation from the mean.\n",
+    "# 2. Data Transformation\n",
+    "df_pca=pca.fit_transform(df_modelo0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 138,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# 3. Construcción de varaible de varianza explicada\n",
+    "variance=pca.explained_variance_ratio_.cumsum()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 155,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "('Numero de Componentes', 39, array([ 0.90236859]))\n",
+      "('Numero de Componentes', 40, array([ 0.90711294]))\n",
+      "('Numero de Componentes', 41, array([ 0.91158096]))\n",
+      "('Numero de Componentes', 42, array([ 0.91594641]))\n",
+      "('Numero de Componentes', 43, array([ 0.92008795]))\n",
+      "('Numero de Componentes', 44, array([ 0.92421428]))\n",
+      "('Numero de Componentes', 45, array([ 0.92803962]))\n",
+      "('Numero de Componentes', 46, array([ 0.93179599]))\n",
+      "('Numero de Componentes', 47, array([ 0.93543022]))\n",
+      "('Numero de Componentes', 48, array([ 0.93898977]))\n",
+      "('Numero de Componentes', 49, array([ 0.94232937]))\n",
+      "('Numero de Componentes', 50, array([ 0.94562655]))\n",
+      "('Numero de Componentes', 51, array([ 0.94879067]))\n",
+      "('Numero de Componentes', 52, array([ 0.95171337]))\n",
+      "('Numero de Componentes', 53, array([ 0.95461705]))\n",
+      "('Numero de Componentes', 54, array([ 0.95719335]))\n",
+      "('Numero de Componentes', 55, array([ 0.95962332]))\n",
+      "('Numero de Componentes', 56, array([ 0.96197343]))\n",
+      "('Numero de Componentes', 57, array([ 0.96430294]))\n",
+      "('Numero de Componentes', 58, array([ 0.96653999]))\n",
+      "('Numero de Componentes', 59, array([ 0.96870785]))\n",
+      "('Numero de Componentes', 60, array([ 0.97071044]))\n",
+      "('Numero de Componentes', 61, array([ 0.97258541]))\n",
+      "('Numero de Componentes', 62, array([ 0.97435444]))\n",
+      "('Numero de Componentes', 63, array([ 0.97606746]))\n",
+      "('Numero de Componentes', 64, array([ 0.9776712]))\n",
+      "('Numero de Componentes', 65, array([ 0.97915707]))\n",
+      "('Numero de Componentes', 66, array([ 0.98062806]))\n",
+      "('Numero de Componentes', 67, array([ 0.98199904]))\n",
+      "('Numero de Componentes', 68, array([ 0.98331709]))\n",
+      "('Numero de Componentes', 69, array([ 0.98454627]))\n",
+      "('Numero de Componentes', 70, array([ 0.98570253]))\n",
+      "('Numero de Componentes', 71, array([ 0.986836]))\n",
+      "('Numero de Componentes', 72, array([ 0.98788614]))\n",
+      "('Numero de Componentes', 73, array([ 0.98885989]))\n",
+      "('Numero de Componentes', 74, array([ 0.98977077]))\n",
+      "('Numero de Componentes', 75, array([ 0.99066358]))\n",
+      "('Numero de Componentes', 76, array([ 0.99150713]))\n",
+      "('Numero de Componentes', 77, array([ 0.99227379]))\n",
+      "('Numero de Componentes', 78, array([ 0.9930077]))\n",
+      "('Numero de Componentes', 79, array([ 0.99366651]))\n",
+      "('Numero de Componentes', 80, array([ 0.99431089]))\n",
+      "('Numero de Componentes', 81, array([ 0.99487146]))\n",
+      "('Numero de Componentes', 82, array([ 0.99540954]))\n",
+      "('Numero de Componentes', 83, array([ 0.99593006]))\n",
+      "('Numero de Componentes', 84, array([ 0.99640523]))\n",
+      "('Numero de Componentes', 85, array([ 0.9968528]))\n",
+      "('Numero de Componentes', 86, array([ 0.99718873]))\n",
+      "('Numero de Componentes', 87, array([ 0.9975077]))\n",
+      "('Numero de Componentes', 88, array([ 0.99781889]))\n",
+      "('Numero de Componentes', 89, array([ 0.99811553]))\n",
+      "('Numero de Componentes', 90, array([ 0.99836098]))\n",
+      "('Numero de Componentes', 91, array([ 0.99860506]))\n",
+      "('Numero de Componentes', 92, array([ 0.99881797]))\n",
+      "('Numero de Componentes', 93, array([ 0.9989937]))\n",
+      "('Numero de Componentes', 94, array([ 0.99916001]))\n",
+      "('Numero de Componentes', 95, array([ 0.99930797]))\n",
+      "('Numero de Componentes', 96, array([ 0.99942832]))\n",
+      "('Numero de Componentes', 97, array([ 0.99953664]))\n",
+      "('Numero de Componentes', 98, array([ 0.99962705]))\n",
+      "('Numero de Componentes', 99, array([ 0.99969891]))\n",
+      "('Numero de Componentes', 100, array([ 0.99976842]))\n",
+      "('Numero de Componentes', 101, array([ 0.99982245]))\n",
+      "('Numero de Componentes', 102, array([ 0.99987628]))\n",
+      "('Numero de Componentes', 103, array([ 0.99992219]))\n",
+      "('Numero de Componentes', 104, array([ 0.99994887]))\n",
+      "('Numero de Componentes', 105, array([ 0.99997125]))\n",
+      "('Numero de Componentes', 106, array([ 0.99998503]))\n",
+      "('Numero de Componentes', 107, array([ 0.99999297]))\n",
+      "('Numero de Componentes', 108, array([ 0.99999799]))\n",
+      "('Numero de Componentes', 109, array([ 1.]))\n",
+      "('Numero de Componentes', 110, array([ 1.]))\n"
+     ]
+    }
+   ],
+   "source": [
+    "# 4. Selección del número de componentes que expliquen un % dado de la varianza, por ejemplo 0.70\n",
+    "for i in range (0, len(df_modelo0.columns)):\n",
+    "    var_explained=variance[i:i+1]\n",
+    "    if var_explained >=0.90: \n",
+    "        print (\"Numero de Componentes\", i, var_explained)\n",
+    "        pca=PCA(n_components=i)\n",
+    "        df_0pca=pca.fit_transform(df_modelo0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "# Con 10 componentes explicaríamos 99% de la varianza. No necesitamos seleccionar 110.Volveremos a aplicar PCA con 10 componentes.\n",
+    "# Distinto sería, por ejemplo, casos de fraude"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 156,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "pca = PCA(n_components = 40)\n",
+    "pca = pca.fit(df_modelo0)\n",
+    "df2  = pca.transform(df_modelo0)\n",
+    "df_pca2  = pd.DataFrame(df2,  columns=range(pca.n_components_))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 139,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "# Convertir a un nuevo dataframe\n",
+    "df_pca=pd.DataFrame(data =df_pca[::], index=list(range(0,len(df))))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 157,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "####### Modelo 0#######\n",
+    "try:\n",
+    "    rf = RandomForestRegressor()\n",
+    "    rf.fit(df_pca2, dftarget)\n",
+    "    result=rf.fit(df_pca2, dftarget)\n",
+    "    y_pred = result.predict(df_pca2)\n",
+    "except np.linalg.linalg.LinAlgError as err:\n",
+    "    if 'Singular matrix' in err.message:\n",
+    "        print \"MODEL-INVALID (Singular Matrix)\"\n",
+    "    else:\n",
+    "        raise"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 146,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "ASSESSING THE MODEL...\n",
+      "Spearman Rank Correlation =  SpearmanrResult(correlation=0.74574412074412066, pvalue=6.050386322162299e-21)\n"
+     ]
+    }
+   ],
+   "source": [
+    "print \"ASSESSING THE MODEL...\"\n",
+    "\n",
+    "# CALCULATING PERFORMANCE ON DEVELOPMENT SAMPLE\n",
+    "from scipy.stats import spearmanr\n",
+    "spearman_correlation= spearmanr(dftarget, y_pred)\n",
+    "print \"Spearman Rank Correlation = \", spearman_correlation"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "### Modelo 1####"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 111,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "164"
+      ]
+     },
+     "execution_count": 111,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# Lista de variables para el cálculo de ratios\n",
+    "list1ratios = [x for x in list_of_inputs_for_model1 if x not in list_continuous_PD]\n",
+    "len(list1ratios)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 112,
+   "metadata": {
+    "collapsed": false
+   },
+   "outputs": [],
+   "source": [
+    "lenls=len(list1ratios)\n",
+    "\n",
+    "for i in range(0, lenls):\n",
+    "    v_1=df.columns[i]\n",
+    "    for j in range(i+1, lenls):\n",
+    "        v_2=df.columns[j]\n",
+    "        if(v_1 in list1ratios and v_2 in list1ratios):\n",
+    "            ratio='r_div'+v_1+v_2\n",
+    "            df[ratio]=np.where(df[v_2]==0,0,(df[v_1]/df[v_2]))\n",
+    "            list_of_inputs_for_model1.append(ratio)\n",
+    "            \n",
+    "        #tasa de crecimiento. \n",
+    "            ratio='r_tasa'+v_1+v_2\n",
+    "            df[ratio]=np.where(df[v_2]==0,0,((df[v_1]-df[v_2])/df[v_2])) \n",
+    "            list_of_inputs_for_model1.append(ratio)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "anaconda-cloud": {},
+  "kernelspec": {
+   "display_name": "Python [conda root]",
+   "language": "python",
+   "name": "conda-root-py"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 2
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython2",
+   "version": "2.7.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 1
+}
